@@ -1,0 +1,117 @@
+import type { PayloadRequest } from 'payload'
+
+import { describe, expect, it } from 'vitest'
+
+import { createComputeReadingTimeHook } from './computeReadingTime.js'
+
+const lexical = (...children: unknown[]) => ({
+  root: { type: 'root', children },
+})
+
+const heading = (tag: string, text: string) => ({
+  type: 'heading',
+  children: [{ type: 'text', text }],
+  tag,
+})
+
+const paragraph = (text: string) => ({
+  type: 'paragraph',
+  children: [{ type: 'text', text }],
+})
+
+function makeHook() {
+  return createComputeReadingTimeHook({
+    characterBasedLocales: ['zh', 'ja', 'ko'],
+    defaultWordsPerMinute: 250,
+    readingTimeField: 'readingTime',
+    richTextField: 'content',
+    wordCountField: 'wordCount',
+    wordsPerMinute: { zh: 500 },
+  })
+}
+
+const baseHookArgs = {
+  collection: undefined as never,
+  context: {},
+  operation: 'create' as const,
+  originalDoc: undefined,
+  req: { locale: undefined } as unknown as PayloadRequest,
+}
+
+describe('createComputeReadingTimeHook', () => {
+  it('populates readingTime and wordCount from data', async () => {
+    const hook = makeHook()
+    const data = {
+      content: lexical(
+        heading('h2', 'Section A'),
+        paragraph('one two three four five six seven eight nine ten'),
+        heading('h3', 'Detail'),
+      ),
+      title: 'Post',
+    }
+
+    const result = (await hook({ ...baseHookArgs, data })) as Record<string, unknown>
+
+    expect(result.title).toBe('Post')
+    expect(result.wordCount).toBe(13)
+    expect(result.readingTime).toBe(1)
+  })
+
+  it('falls back to originalDoc when data has no rich text', async () => {
+    const hook = makeHook()
+    const result = (await hook({
+      ...baseHookArgs,
+      data: { title: 'updated' } as Record<string, unknown>,
+      originalDoc: {
+        content: lexical(paragraph('a b c d e')),
+        title: 'old',
+      } as Record<string, unknown>,
+    })) as Record<string, unknown>
+
+    expect(result.wordCount).toBe(5)
+    expect(result.readingTime).toBe(1)
+  })
+
+  it('skips fields configured as false', async () => {
+    const hook = createComputeReadingTimeHook({
+      characterBasedLocales: [],
+      defaultWordsPerMinute: 250,
+      readingTimeField: 'readingTime',
+      richTextField: 'content',
+      wordCountField: false,
+      wordsPerMinute: {},
+    })
+
+    const result = (await hook({
+      ...baseHookArgs,
+      data: { content: lexical(paragraph('hello world')) } as Record<string, unknown>,
+    })) as Record<string, unknown>
+
+    expect(result.readingTime).toBe(1)
+    expect(result).not.toHaveProperty('wordCount')
+  })
+
+  it('uses the request locale to pick WPM', async () => {
+    const hook = makeHook()
+    const longChineseText = '我喜欢看书'.repeat(120)
+    const result = (await hook({
+      ...baseHookArgs,
+      data: { content: lexical(paragraph(longChineseText)) } as Record<string, unknown>,
+      req: { locale: 'zh' } as unknown as PayloadRequest,
+    })) as Record<string, unknown>
+
+    expect(result.wordCount).toBe(600)
+    expect(result.readingTime).toBe(2)
+  })
+
+  it('produces zero values when there is no rich text input', async () => {
+    const hook = makeHook()
+    const result = (await hook({
+      ...baseHookArgs,
+      data: { title: 'no body' } as Record<string, unknown>,
+    })) as Record<string, unknown>
+
+    expect(result.wordCount).toBe(0)
+    expect(result.readingTime).toBe(0)
+  })
+})
