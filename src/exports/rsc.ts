@@ -1,3 +1,4 @@
+export { extractFieldText } from '../lib/extractFieldText.js'
 export { walkLexical } from '../lib/lexicalWalker.js'
 export {
   computeReadingTime,

@@ -1,8 +1,8 @@
 import type { CollectionBeforeChangeHook } from 'payload'
 
-import type { ResolvedReadingTimeConfig } from '../types.js'
+import type { ResolvedReadingTimeConfig, ResolvedReadingTimeSource } from '../types.js'
 
-import { walkLexical } from '../lib/lexicalWalker.js'
+import { extractFieldText } from '../lib/extractFieldText.js'
 import {
   computeReadingTime,
   countWords,
@@ -12,7 +12,7 @@ import {
 
 type HookOptions = {
   readingTimeField: false | string
-  richTextField: string
+  sources: ResolvedReadingTimeSource[]
   wordCountField: false | string
 } & Pick<
   ResolvedReadingTimeConfig,
@@ -22,10 +22,17 @@ type HookOptions = {
 /** Factory for the `beforeChange` hook that recomputes `readingTime` and `wordCount`. */
 export function createComputeReadingTimeHook(options: HookOptions): CollectionBeforeChangeHook {
   return ({ data, originalDoc, req }) => {
-    const richTextValue =
-      readPath(data, options.richTextField) ?? readPath(originalDoc, options.richTextField)
+    const parts: string[] = []
 
-    const { plainText } = walkLexical(richTextValue)
+    for (const source of options.sources) {
+      const value = readPath(data, source.path) ?? readPath(originalDoc, source.path)
+      const text = extractFieldText(value, source.type)
+      if (text) {
+        parts.push(text)
+      }
+    }
+
+    const plainText = parts.join(' ').replace(/\s+/g, ' ').trim()
 
     const locale = typeof req?.locale === 'string' ? req.locale : DEFAULT_LOCALE_KEY
     const wpm = resolveWordsPerMinute(locale, options)

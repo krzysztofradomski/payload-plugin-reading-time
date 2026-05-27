@@ -24,6 +24,26 @@ export type ReadingTimeAdminConfig = {
 }
 
 /**
+ * Payload field types this plugin knows how to read text from.
+ *
+ * `richText` is the Lexical state walker. The others extract a plain string
+ * (with `json` recursing into nested string values, ignoring keys).
+ */
+export type ReadingTimeFieldType = 'code' | 'json' | 'richText' | 'text' | 'textarea'
+
+/**
+ * One input source for reading-time calculation. Pass a string for the
+ * common case (a Lexical rich-text field at `path`) or an object to also
+ * declare the field type.
+ *
+ * Omitting `type` defaults to `'richText'`.
+ */
+export type ReadingTimeSource = { path: string; type?: ReadingTimeFieldType } | string
+
+/** Per-source config after defaults are applied. */
+export type ResolvedReadingTimeSource = { path: string; type: ReadingTimeFieldType }
+
+/**
  * Per-collection configuration for the reading-time plugin.
  *
  * Defaults compute `readingTime` and `wordCount` from a top-level `content`
@@ -39,10 +59,21 @@ export type ReadingTimeCollectionConfig = {
    */
   readingTimeField?: false | string
   /**
-   * Dot-path to the rich-text field used as the input.
+   * @deprecated Use `sources` instead. Kept as a fallback when `sources`
+   * is not provided so the plugin remains backward-compatible.
    * @default 'content'
    */
   richTextField?: string
+  /**
+   * One or more input fields to read text from. A bare string is treated as
+   * a dot-path to a rich-text field; pass `{ path, type }` to read from
+   * `text`, `textarea`, `code`, or `json` fields. When multiple sources are
+   * given, their extracted text is concatenated before counting.
+   *
+   * When omitted, falls back to `richTextField` (or its default `'content'`)
+   * as a single rich-text source.
+   */
+  sources?: ReadingTimeSource | ReadingTimeSource[]
   /**
    * Field name to store the word count. `false` skips the field.
    * @default 'wordCount'
@@ -69,7 +100,10 @@ export type PayloadReadingTimeConfig = {
 /** Per-collection config after defaults are applied. */
 export type ResolvedCollectionConfig = {
   admin: Required<ReadingTimeAdminConfig>
-} & Omit<Required<ReadingTimeCollectionConfig>, 'admin'>
+  readingTimeField: false | string
+  sources: ResolvedReadingTimeSource[]
+  wordCountField: false | string
+}
 
 /** Resolved configuration after defaults are applied. */
 export type ResolvedReadingTimeConfig = {
@@ -83,6 +117,8 @@ export const DEFAULT_ADMIN_CONFIG = {
   layout: 'stacked' as const,
   position: 'sidebar' as const,
 }
+
+export const DEFAULT_READING_TIME_FIELD_TYPE: ReadingTimeFieldType = 'richText'
 
 export const DEFAULT_READING_TIME_CONFIG = {
   admin: DEFAULT_ADMIN_CONFIG,

@@ -24,7 +24,7 @@ function makeHook() {
     characterBasedLocales: ['zh', 'ja', 'ko'],
     defaultWordsPerMinute: 250,
     readingTimeField: 'readingTime',
-    richTextField: 'content',
+    sources: [{ type: 'richText', path: 'content' }],
     wordCountField: 'wordCount',
     wordsPerMinute: { zh: 500 },
   })
@@ -77,7 +77,7 @@ describe('createComputeReadingTimeHook', () => {
       characterBasedLocales: [],
       defaultWordsPerMinute: 250,
       readingTimeField: 'readingTime',
-      richTextField: 'content',
+      sources: [{ type: 'richText', path: 'content' }],
       wordCountField: false,
       wordsPerMinute: {},
     })
@@ -113,5 +113,56 @@ describe('createComputeReadingTimeHook', () => {
 
     expect(result.wordCount).toBe(0)
     expect(result.readingTime).toBe(0)
+  })
+
+  it('aggregates plain text across multiple sources of mixed types', async () => {
+    const hook = createComputeReadingTimeHook({
+      characterBasedLocales: [],
+      defaultWordsPerMinute: 250,
+      readingTimeField: 'readingTime',
+      sources: [
+        { type: 'text', path: 'title' },
+        { type: 'textarea', path: 'excerpt' },
+        { type: 'richText', path: 'content' },
+        { type: 'json', path: 'meta' },
+        { type: 'code', path: 'snippet' },
+      ],
+      wordCountField: 'wordCount',
+      wordsPerMinute: {},
+    })
+
+    const result = (await hook({
+      ...baseHookArgs,
+      data: {
+        content: lexical(paragraph('rich body words')),
+        excerpt: 'one two three',
+        meta: { author: 'gamma', tags: ['alpha', 'beta'] },
+        snippet: 'const x = 1',
+        title: 'Hello world',
+      } as Record<string, unknown>,
+    })) as Record<string, unknown>
+
+    // 2 (title) + 3 (excerpt) + 3 (richText) + 3 (json) + 4 (code) = 15
+    expect(result.wordCount).toBe(15)
+    expect(result.readingTime).toBe(1)
+  })
+
+  it('counts a standalone text-type source even without rich text', async () => {
+    const hook = createComputeReadingTimeHook({
+      characterBasedLocales: [],
+      defaultWordsPerMinute: 250,
+      readingTimeField: 'readingTime',
+      sources: [{ type: 'textarea', path: 'summary' }],
+      wordCountField: 'wordCount',
+      wordsPerMinute: {},
+    })
+
+    const result = (await hook({
+      ...baseHookArgs,
+      data: { summary: 'a b c d e f g h i j' } as Record<string, unknown>,
+    })) as Record<string, unknown>
+
+    expect(result.wordCount).toBe(10)
+    expect(result.readingTime).toBe(1)
   })
 })

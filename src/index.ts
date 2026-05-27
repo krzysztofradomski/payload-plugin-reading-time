@@ -4,14 +4,18 @@ import { createComputeReadingTimeHook } from './hooks/computeReadingTime.js'
 import {
   DEFAULT_ADMIN_CONFIG,
   DEFAULT_READING_TIME_CONFIG,
+  DEFAULT_READING_TIME_FIELD_TYPE,
   type PayloadReadingTimeConfig,
   type ReadingTimeCollectionConfig,
+  type ReadingTimeSource,
   type ResolvedCollectionConfig,
   type ResolvedReadingTimeConfig,
+  type ResolvedReadingTimeSource,
 } from './types.js'
 
 export { createComputeReadingTimeHook } from './hooks/computeReadingTime.js'
 
+export { extractFieldText } from './lib/extractFieldText.js'
 export { walkLexical } from './lib/lexicalWalker.js'
 export {
   computeReadingTime,
@@ -24,8 +28,11 @@ export type {
   PayloadReadingTimeConfig,
   ReadingTimeAdminConfig,
   ReadingTimeCollectionConfig,
+  ReadingTimeFieldType,
+  ReadingTimeSource,
   ResolvedCollectionConfig,
   ResolvedReadingTimeConfig,
+  ResolvedReadingTimeSource,
 } from './types.js'
 
 /**
@@ -99,7 +106,7 @@ function resolveConfig(options: PayloadReadingTimeConfig): ResolvedReadingTimeCo
         collectionOptions.readingTimeField === undefined
           ? DEFAULT_READING_TIME_CONFIG.readingTimeField
           : collectionOptions.readingTimeField,
-      richTextField: collectionOptions.richTextField ?? DEFAULT_READING_TIME_CONFIG.richTextField,
+      sources: resolveSources(collectionOptions),
       wordCountField:
         collectionOptions.wordCountField === undefined
           ? DEFAULT_READING_TIME_CONFIG.wordCountField
@@ -108,13 +115,37 @@ function resolveConfig(options: PayloadReadingTimeConfig): ResolvedReadingTimeCo
   }
 
   return {
-    characterBasedLocales:
-      options.characterBasedLocales ?? [...DEFAULT_READING_TIME_CONFIG.characterBasedLocales],
+    characterBasedLocales: options.characterBasedLocales ?? [
+      ...DEFAULT_READING_TIME_CONFIG.characterBasedLocales,
+    ],
     collections,
     defaultWordsPerMinute:
       options.defaultWordsPerMinute ?? DEFAULT_READING_TIME_CONFIG.defaultWordsPerMinute,
     wordsPerMinute: options.wordsPerMinute ?? {},
   }
+}
+
+function resolveSources(options: ReadingTimeCollectionConfig): ResolvedReadingTimeSource[] {
+  if (options.sources !== undefined) {
+    const raw = Array.isArray(options.sources) ? options.sources : [options.sources]
+    return raw
+      .map(normalizeSource)
+      .filter((source): source is ResolvedReadingTimeSource => Boolean(source.path))
+  }
+
+  return [
+    {
+      type: DEFAULT_READING_TIME_FIELD_TYPE,
+      path: options.richTextField ?? DEFAULT_READING_TIME_CONFIG.richTextField,
+    },
+  ]
+}
+
+function normalizeSource(source: ReadingTimeSource): ResolvedReadingTimeSource {
+  if (typeof source === 'string') {
+    return { type: DEFAULT_READING_TIME_FIELD_TYPE, path: source }
+  }
+  return { type: source.type ?? DEFAULT_READING_TIME_FIELD_TYPE, path: source.path }
 }
 
 function enhanceCollection(
@@ -135,7 +166,7 @@ function enhanceCollection(
       characterBasedLocales: resolved.characterBasedLocales,
       defaultWordsPerMinute: resolved.defaultWordsPerMinute,
       readingTimeField: collectionConfig.readingTimeField,
-      richTextField: collectionConfig.richTextField,
+      sources: collectionConfig.sources,
       wordCountField: collectionConfig.wordCountField,
       wordsPerMinute: resolved.wordsPerMinute,
     }),
